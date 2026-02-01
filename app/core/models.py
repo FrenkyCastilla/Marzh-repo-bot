@@ -4,6 +4,16 @@ from datetime import datetime
 
 Base = declarative_base()
 
+# --- ВЕРНУЛИ ЭТОТ КЛАСС ---
+class Server(Base):
+    __tablename__ = "servers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    api_url = Column(String, nullable=False)
+    username = Column(String, nullable=True)
+    password = Column(String, nullable=True)
+
 class User(Base):
     __tablename__ = "users"
 
@@ -20,7 +30,7 @@ class Plan(Base):
     name = Column(String, nullable=False)
     price = Column(Integer, nullable=False)
     
-    # Новые поля, которые мы добавили в SQL
+    # Новые поля
     duration_days = Column(Integer, nullable=False, default=30)
     limit_gb = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
@@ -32,11 +42,11 @@ class Transaction(Base):
     user_id = Column(BigInteger, nullable=False)
     amount = Column(Integer, nullable=False)
     
-    # Вот из-за отсутствия этого поля была ошибка!
+    # Поле, которое мы чинили
     plan_id = Column(Integer, nullable=True) 
     
     receipt_file_id = Column(String, nullable=True)
-    status = Column(String, default="pending")  # pending, approved, rejected
+    status = Column(String, default="pending")  
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Subscription(Base):
@@ -45,8 +55,8 @@ class Subscription(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, nullable=False)
     
-    # Ключ подписки (ссылка)
+    # Ключ
     marzban_key = Column(String, nullable=True)
     
-    status = Column(String, default="active")  # active, expired
+    status = Column(String, default="active") 
     expire_date = Column(DateTime, nullable=True)
