@@ -2,7 +2,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 
 def main_menu():
     kb = [
-        [KeyboardButton(text="🛒 Купить VPN")],
+        [KeyboardButton(text="🛒 Купить доступ")],
         [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="ℹ️ Помощь")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
