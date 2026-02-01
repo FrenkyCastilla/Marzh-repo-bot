@@ -145,4 +145,93 @@ async def process_buy_plan(callback: types.CallbackQuery, state: FSMContext, ses
         f"💳 Вы выбрали: {plan.name}\n"
         f"💰 К оплате: {plan.price} RUB\n\n"
         f"{settings.PAYMENT_INFO}\n\n"
-        "После пере
+        "После перевода отправьте скриншот чека сюда."
+    )
+    await callback.answer()
+
+@router.message(PaymentStates.waiting_for_receipt, F.photo)
+async def handle_receipt(message: types.Message, state: FSMContext, session: AsyncSession):
+    data = await state.get_data()
+    plan_id = data.get("plan_id")
+    amount = data.get("amount")
+    photo = message.photo[-1]
+    
+    await message.answer("⏳ Обрабатываем ваш платеж... Доступ будет предоставлен автоматически на 24 часа.")
+    
+    sub, error = await process_new_payment(session, message.from_user.id, amount, photo.file_id, plan_id)
+    
+    if error:
+        await message.answer(f"❌ Ошибка: {error}")
+    else:
+        # Успешная выдача временного доступа
+        await message.answer(
+            "✅ Платеж получен! Вам предоставлен доступ.\n"
+            "Администратор проверит чек и продлит подписку на полный срок.\n\n"
+            f"Ваша ссылка: `{sub.marzban_key}`",
+            parse_mode="Markdown"
+        )
+        # Сразу кидаем инструкцию, чтобы юзер не тупил
+        await message.answer(INSTRUCTION_TEXT, parse_mode="HTML", disable_web_page_preview=True)
+        
+        # Notify Admin
+        # ... тут твой код уведомления админа ...
+        tx_query = await session.execute(
+            select(Transaction).where(Transaction.user_id == message.from_user.id).order_by(Transaction.id.desc())
+        )
+        tx = tx_query.scalars().first()
+        
+        await message.bot.send_photo(
+            settings.ADMIN_ID,
+            photo.file_id,
+            caption=f"🔔 Новый платеж!\nID: {tx.id}\nСумма: {amount} RUB",
+            reply_markup=admin_approval_keyboard(tx.id)
+        )
+    
+    await state.clear()
+
+@router.message(F.text == "👤 Профиль")
+async def profile_menu(message: types.Message, session: AsyncSession):
+    user_id = message.from_user.id
+    sub_query = await session.execute(
+        select(Subscription).where(Subscription.user_id == user_id).order_by(Subscription.id.desc())
+    )
+    sub = sub_query.scalars().first()
+    
+    if not sub:
+        await message.answer("У вас пока нет активных подписок.")
+    else:
+        status = "✅ Активна" if sub.status == "active" else "❌ Истекла"
+        await message.answer(
+            f"👤 Профиль\n\n"
+            f"Статус: {status}\n"
+            f"Истекает: {sub.expire_date.strftime('%d.%m.%Y %H:%M')}\n"
+            f"Ключ: `{sub.marzban_key}`",
+            parse_mode="Markdown"
+        )
+
+# Callbacks админа (оставляем как есть)
+@router.callback_query(F.data.startswith("admin_approve_"))
+async def admin_approve(callback: types.CallbackQuery, session: AsyncSession):
+    tx_id = int(callback.data.split("_")[-1])
+    success, msg = await approve_payment(session, tx_id)
+    
+    if success:
+        await callback.message.edit_caption(caption=f"{callback.message.caption}\n\n✅ Одобрено!")
+        tx_query = await session.execute(select(Transaction).where(Transaction.id == tx_id))
+        tx = tx_query.scalar_one()
+        await callback.bot.send_message(tx.user_id, "✅ Ваш платеж подтвержден! Подписка продлена на полный срок.")
+    else:
+        await callback.answer(f"Ошибка: {msg}")
+
+@router.callback_query(F.data.startswith("admin_reject_"))
+async def admin_reject(callback: types.CallbackQuery, session: AsyncSession):
+    tx_id = int(callback.data.split("_")[-1])
+    success, msg = await reject_payment(session, tx_id)
+    
+    if success:
+        await callback.message.edit_caption(caption=f"{callback.message.caption}\n\n❌ Отклонено!")
+        tx_query = await session.execute(select(Transaction).where(Transaction.id == tx_id))
+        tx = tx_query.scalar_one()
+        await callback.bot.send_message(tx.user_id, "❌ Ваш платеж отклонен. Доступ заблокирован.")
+    else:
+        await callback.answer(f"Ошибка: {msg}")
