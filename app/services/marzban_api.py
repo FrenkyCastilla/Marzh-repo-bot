@@ -61,7 +61,7 @@ class MarzbanAPI:
         headers = await self._get_headers()
         payload = {
             "username": username,
-            "proxies": {"vless": {}}, 
+            "proxies": {"vless": {"inbound_tags": ["VLESS TCP REALITY"]}}, 
             "data_limit": data_limit * 1024 * 1024 * 1024, # GB to Bytes
             "expire": expire,
             "status": "active"
