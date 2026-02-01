@@ -1,58 +1,52 @@
+from sqlalchemy import Column, Integer, String, Boolean, BigInteger, DateTime, ForeignKey
+from sqlalchemy.orm import declarative_base
 from datetime import datetime
-from typing import List, Optional
-from sqlalchemy import BigInteger, Float, Integer, String, Boolean, DateTime, ForeignKey, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from .db import Base
+
+Base = declarative_base()
 
 class User(Base):
     __tablename__ = "users"
-    
-    telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    username: Mapped[Optional[str]] = mapped_column(String(255))
-    full_name: Mapped[Optional[str]] = mapped_column(String(255))
-    balance: Mapped[float] = mapped_column(Float, default=0.0)
-    is_banned: Mapped[bool] = mapped_column(Boolean, default=False)
-    
-    subscriptions: Mapped[List["Subscription"]] = relationship(back_populates="user")
-    transactions: Mapped[List["Transaction"]] = relationship(back_populates="user")
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    telegram_id = Column(BigInteger, unique=True, nullable=False)
+    username = Column(String, nullable=True)
+    full_name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class Plan(Base):
     __tablename__ = "plans"
-    
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(100))
-    price: Mapped[float] = mapped_column(Float)
-    duration_days: Mapped[int] = mapped_column(Integer)
-    limit_gb: Mapped[int] = mapped_column(Integer)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-class Server(Base):
-    __tablename__ = "servers"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    price = Column(Integer, nullable=False)
     
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    host_url: Mapped[str] = mapped_column(String(255))
-    username: Mapped[str] = mapped_column(String(100))
-    password: Mapped[str] = mapped_column(String(100))
-
-class Subscription(Base):
-    __tablename__ = "subscriptions"
-    
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.telegram_id"))
-    marzban_key: Mapped[str] = mapped_column(Text)
-    expire_date: Mapped[datetime] = mapped_column(DateTime)
-    status: Mapped[str] = mapped_column(String(20), default="active") # active/expired
-    
-    user: Mapped["User"] = relationship(back_populates="subscriptions")
+    # Новые поля, которые мы добавили в SQL
+    duration_days = Column(Integer, nullable=False, default=30)
+    limit_gb = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
 
 class Transaction(Base):
     __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False)
+    amount = Column(Integer, nullable=False)
     
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.telegram_id"))
-    amount: Mapped[float] = mapped_column(Float)
-    proof_file_id: Mapped[str] = mapped_column(String(255))
-    status: Mapped[str] = mapped_column(String(20), default="pending") # pending/approved/rejected
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Вот из-за отсутствия этого поля была ошибка!
+    plan_id = Column(Integer, nullable=True) 
     
-    user: Mapped["User"] = relationship(back_populates="transactions")
+    receipt_file_id = Column(String, nullable=True)
+    status = Column(String, default="pending")  # pending, approved, rejected
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False)
+    
+    # Ключ подписки (ссылка)
+    marzban_key = Column(String, nullable=True)
+    
+    status = Column(String, default="active")  # active, expired
+    expire_date = Column(DateTime, nullable=True)
