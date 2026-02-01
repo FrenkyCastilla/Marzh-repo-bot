@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 
 class MarzbanAPI:
     def __init__(self):
+        # Гарантируем, что в конце хоста нет слеша, чтобы не было двойных //
         self.host = settings.MARZBAN_HOST.rstrip('/')
         self.username = settings.MARZBAN_USERNAME
         self.password = settings.MARZBAN_PASSWORD
@@ -37,6 +38,21 @@ class MarzbanAPI:
             await self._get_token()
         return {"Authorization": f"Bearer {self.token}"}
 
+    def _fix_subscription_url(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Магия: Если ссылка относительная (/sub/...), превращаем её в абсолютную (https://...)
+        """
+        if not data:
+            return data
+            
+        sub_url = data.get("subscription_url", "")
+        if sub_url and sub_url.startswith("/"):
+            # Склеиваем хост и путь
+            data["subscription_url"] = f"{self.host}{sub_url}"
+            logger.info(f"Fixed subscription URL: {data['subscription_url']}")
+            
+        return data
+
     async def create_user(self, username: str, data_limit: int, expire: int) -> Optional[Dict[str, Any]]:
         """
         Create OR Update (Renew) a user in Marzban.
@@ -48,28 +64,27 @@ class MarzbanAPI:
             "proxies": {"vless": {}}, 
             "data_limit": data_limit * 1024 * 1024 * 1024, # GB to Bytes
             "expire": expire,
-            "status": "active" # Важно! Разбаниваем юзера при продлении
+            "status": "active"
         }
         
         try:
             async with aiohttp.ClientSession() as session:
-                # 1. Попытка создания (POST)
+                # 1. Попытка создания
                 async with session.post(url, json=payload, headers=headers, ssl=False) as response:
                     if response.status == 200:
-                        logger.info(f"User {username} created successfully.")
-                        return await response.json()
+                        data = await response.json()
+                        return self._fix_subscription_url(data) # <--- ЧИНИМ ССЫЛКУ ТУТ
                     
-                    # 2. Логика ПРОДЛЕНИЯ: Если юзер уже есть (409 Conflict)
+                    # 2. Если юзер уже есть - ОБНОВЛЯЕМ
                     elif response.status == 409:
-                        logger.info(f"User {username} already exists. Switching to UPDATE mode...")
+                        logger.info(f"User {username} exists. Updating...")
                         modify_url = f"{self.host}/api/user/{username}"
-                        # Шлем PUT запрос для обновления лимитов и даты
                         async with session.put(modify_url, json=payload, headers=headers, ssl=False) as mod_response:
                             if mod_response.status == 200:
-                                logger.info(f"User {username} successfully renewed/updated.")
-                                return await mod_response.json()
+                                data = await mod_response.json()
+                                return self._fix_subscription_url(data) # <--- И ТУТ
                             else:
-                                logger.error(f"Failed to renew user {username}. Status: {mod_response.status}")
+                                logger.error(f"Failed to renew user. Status: {mod_response.status}")
                                 return None
 
                     elif response.status == 401: # Token expired
@@ -89,7 +104,8 @@ class MarzbanAPI:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=headers, ssl=False) as response:
                     if response.status == 200:
-                        return await response.json()
+                        data = await response.json()
+                        return self._fix_subscription_url(data)
                     return None
         except Exception as e:
             logger.error(f"Marzban get_user error: {e}")
