@@ -30,11 +30,11 @@ async def cmd_start(message: types.Message, session: AsyncSession):
         await session.commit()
     
     await message.answer(
-        "👋 Добро пожаловать в наш VPN сервис!\n\nВыберите действие в меню ниже:",
+        "👋 Добро пожаловать в наш сервис!\n\nВыберите действие в меню ниже:",
         reply_markup=main_menu()
     )
 
-@router.message(F.text == "🛒 Купить VPN")
+@router.message(F.text == "🛒 Купить доступ")
 async def shop_menu(message: types.Message, session: AsyncSession):
     plans_query = await session.execute(select(Plan).where(Plan.is_active == True))
     plans = plans_query.scalars().all()
