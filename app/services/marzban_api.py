@@ -19,8 +19,9 @@ class MarzbanAPI:
             "password": self.password
         }
         try:
+            # FIX: Добавлен ssl=False
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, data=data) as response:
+                async with session.post(url, data=data, ssl=False) as response:
                     if response.status == 200:
                         result = await response.json()
                         self.token = result.get("access_token")
@@ -53,8 +54,9 @@ class MarzbanAPI:
         }
         
         try:
+            # FIX: Добавлен ssl=False
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload, headers=headers) as response:
+                async with session.post(url, json=payload, headers=headers, ssl=False) as response:
                     if response.status == 200:
                         return await response.json()
                     elif response.status == 401: # Token expired
@@ -71,8 +73,9 @@ class MarzbanAPI:
         url = f"{self.host}/api/user/{username}"
         headers = await self._get_headers()
         try:
+            # FIX: Добавлен ssl=False
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as response:
+                async with session.get(url, headers=headers, ssl=False) as response:
                     if response.status == 200:
                         return await response.json()
                     return None
@@ -84,8 +87,9 @@ class MarzbanAPI:
         url = f"{self.host}/api/user/{username}"
         headers = await self._get_headers()
         try:
+            # FIX: Добавлен ssl=False
             async with aiohttp.ClientSession() as session:
-                async with session.put(url, json=payload, headers=headers) as response:
+                async with session.put(url, json=payload, headers=headers, ssl=False) as response:
                     return response.status == 200
         except Exception as e:
             logger.error(f"Marzban modify_user error: {e}")
@@ -95,8 +99,9 @@ class MarzbanAPI:
         url = f"{self.host}/api/user/{username}"
         headers = await self._get_headers()
         try:
+            # FIX: Добавлен ssl=False
             async with aiohttp.ClientSession() as session:
-                async with session.delete(url, headers=headers) as response:
+                async with session.delete(url, headers=headers, ssl=False) as response:
                     return response.status == 200
         except Exception as e:
             logger.error(f"Marzban delete_user error: {e}")
