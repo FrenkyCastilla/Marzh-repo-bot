@@ -4,7 +4,6 @@ from datetime import datetime
 
 Base = declarative_base()
 
-# --- ВЕРНУЛИ ЭТОТ КЛАСС ---
 class Server(Base):
     __tablename__ = "servers"
 
@@ -22,6 +21,10 @@ class User(Base):
     username = Column(String, nullable=True)
     full_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # --- ВЕРНУЛИ ЭТИ ПОЛЯ (Админка их требует) ---
+    balance = Column(Integer, default=0)
+    is_banned = Column(Boolean, default=False)
 
 class Plan(Base):
     __tablename__ = "plans"
@@ -29,8 +32,6 @@ class Plan(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
     price = Column(Integer, nullable=False)
-    
-    # Новые поля
     duration_days = Column(Integer, nullable=False, default=30)
     limit_gb = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
@@ -41,10 +42,7 @@ class Transaction(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, nullable=False)
     amount = Column(Integer, nullable=False)
-    
-    # Поле, которое мы чинили
     plan_id = Column(Integer, nullable=True) 
-    
     receipt_file_id = Column(String, nullable=True)
     status = Column(String, default="pending")  
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -54,9 +52,6 @@ class Subscription(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, nullable=False)
-    
-    # Ключ
     marzban_key = Column(String, nullable=True)
-    
     status = Column(String, default="active") 
     expire_date = Column(DateTime, nullable=True)
