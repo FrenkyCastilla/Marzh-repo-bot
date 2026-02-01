@@ -9,7 +9,8 @@ class Server(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
-    api_url = Column(String, nullable=False)
+    # БЫЛО: api_url, СТАЛО: host_url (как хочет админка)
+    host_url = Column(String, nullable=False) 
     username = Column(String, nullable=True)
     password = Column(String, nullable=True)
 
@@ -22,7 +23,7 @@ class User(Base):
     full_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    # --- ВЕРНУЛИ ЭТИ ПОЛЯ (Админка их требует) ---
+    # Поля для админки
     balance = Column(Integer, default=0)
     is_banned = Column(Boolean, default=False)
 
