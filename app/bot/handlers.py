@@ -1,33 +1,44 @@
+import logging
+import time
+from datetime import datetime
+
 from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime
-import time
 
-# Импорты твоих модулей
+# Импорты
 from ..core.models import User, Plan, Subscription, Transaction
 from ..core.config import settings
 from .keyboards import main_menu, plans_keyboard, admin_approval_keyboard
-from ..services.payment_service import process_new_payment, approve_payment, reject_payment
 from ..services.marzban_api import MarzbanAPI
 
+# Логирование
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 router = Router()
-api = MarzbanAPI() # Инициализируем API для работы с панелью
+api = MarzbanAPI()
 
-# --- КОНСТАНТЫ И ТЕКСТЫ ---
-
+# --- ТЕКСТЫ ---
 INSTRUCTION_TEXT = (
-    "<b>🚀 Настройка подключения</b>\n\n"
-    "1. Скачайте приложение:\n"
-    "📱 <b>Android:</b> <a href='https://play.google.com/store/apps/details?id=com.v2ray.ang'>v2rayNG</a>\n"
-    "🍏 <b>iOS:</b> <a href='https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690'>V2Box</a>\n"
-    "💻 <b>PC:</b> <a href='https://github.com/hiddify/hiddify-next/releases'>Hiddify Next</a>\n\n"
-    "2. Скопируйте выданный ключ (начинается с <code>vless://</code>).\n"
-    "3. Откройте приложение — оно предложит добавить ключ из буфера.\n"
-    "4. Нажмите кнопку подключения (Connect)."
+    "<b>🚀 Настройка подключения:</b>\n\n"
+    "1. Скачай приложение:\n"
+    "📱 <b>Android:</b> <a href='https://play.google.com/store/apps/details?id=com.v2ray.ang'>v2rayNG (Google Play)</a>\n"
+    "🍏 <b>iOS:</b> <a href='https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690'>V2Box (AppStore)</a>\n"
+    "💻 <b>PC (Windows):</b> <a href='https://github.com/hiddify/hiddify-next/releases/latest/download/Hiddify-Windows-Setup-x64.exe'>Скачать Hiddify</a>\n\n"
+    "2. Скопируй ключ (начинается с <code>vless://</code>).\n"
+    "3. Вставь ключ в приложение и нажми подключиться."
+)
+
+WELCOME_TEXT = (
+    "Привет, <b>{name}</b>! 👋\n\n"
+    "Я бот для выдачи скоростного доступа в сеть.\n"
+    "Youtube 4K, Instagram, Игры — без ограничений скорости.\n\n"
+    "🔐 Трафик шифруется. Логи не ведутся.\n"
+    "Жми <b>«⚡️ Купить доступ»</b>, чтобы начать."
 )
 
 class PaymentStates(StatesGroup):
@@ -35,49 +46,52 @@ class PaymentStates(StatesGroup):
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
-async def calculate_new_expire(username: str, days_to_add: int) -> int:
-    """Суммирует дни подписки или создает новую дату."""
-    user_info = await api.get_user(username)
-    current_timestamp = int(time.time())
-    seconds_to_add = days_to_add * 24 * 60 * 60
+def get_username(user: types.User) -> str:
+    """Генерирует логин: Никнейм (если есть) или user_ID"""
+    if user.username:
+        return user.username
+    return f"user_{user.id}"
 
-    if not user_info or not user_info.get("expire"):
-        return current_timestamp + seconds_to_add
-
-    old_expire = user_info.get("expire")
+async def get_expire_date(username: str, days: int) -> int:
+    """Считает дату окончания подписки"""
+    current_ts = int(time.time())
+    seconds_add = days * 24 * 60 * 60
     
-    # Если подписка активна -> добавляем к старой дате
-    if old_expire > current_timestamp:
-        return old_expire + seconds_to_add
-    else:
-        return current_timestamp + seconds_to_add
+    try:
+        user_info = await api.get_user(username)
+        old_expire = user_info.get("expire") or 0
+        if old_expire > current_ts:
+            return old_expire + seconds_add
+    except:
+        pass
+        
+    return current_ts + seconds_add
 
 # --- ХЕНДЛЕРЫ ---
 
 @router.message(Command("start"))
-async def cmd_start(message: types.Message, session: AsyncSession):
-    user_id = message.from_user.id
-    user_query = await session.execute(select(User).where(User.telegram_id == user_id))
-    user = user_query.scalar_one_or_none()
+async def cmd_start(message: types.Message, session: AsyncSession, state: FSMContext):
+    await state.clear()
     
-    if not user:
-        user = User(
-            telegram_id=user_id,
+    # Проверка юзера
+    result = await session.execute(select(User).where(User.telegram_id == message.from_user.id))
+    if not result.scalars().first():
+        session.add(User(
+            telegram_id=message.from_user.id,
             username=message.from_user.username,
             full_name=message.from_user.full_name
-        )
-        session.add(user)
+        ))
         await session.commit()
     
-    welcome_text = (
-        f"Привет, <b>{message.from_user.first_name}</b>! 👋\n\n"
-        "Я бот для выдачи скоростного доступа в сеть.\n"
-        "Youtube 4K, Instagram, Игры — без ограничений скорости.\n\n"
-        "🔐 Трафик шифруется. Логи не ведутся.\n"
-        "Жми <b>«⚡️ Купить доступ»</b>, чтобы начать."
+    await message.answer(
+        WELCOME_TEXT.format(name=message.from_user.first_name),
+        reply_markup=main_menu(), 
+        parse_mode="HTML"
     )
-    
-    await message.answer(welcome_text, reply_markup=main_menu(), parse_mode="HTML")
+
+@router.message(F.text == "🏠 Главная")
+async def cmd_home(message: types.Message, session: AsyncSession, state: FSMContext):
+    await cmd_start(message, session, state)
 
 @router.message(F.text == "ℹ️ Помощь")
 async def help_command(message: types.Message):
@@ -85,153 +99,230 @@ async def help_command(message: types.Message):
 
 @router.message(F.text == "⚡️ Купить доступ")
 async def shop_menu(message: types.Message, session: AsyncSession):
-    plans_query = await session.execute(select(Plan).where(Plan.is_active == True))
-    plans = plans_query.scalars().all()
+    result = await session.execute(select(Plan).where(Plan.is_active == True))
+    plans = result.scalars().all()
     
     if not plans:
-        await message.answer("К сожалению, сейчас нет доступных тарифов.")
+        await message.answer("Тарифы не найдены.")
         return
         
-    await message.answer("Выберите подходящий тариф:", reply_markup=plans_keyboard(plans))
+    await message.answer("💎 Выберите период:", reply_markup=plans_keyboard(plans))
 
 @router.callback_query(F.data.startswith("buy_plan_"))
 async def process_buy_plan(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
     plan_id = int(callback.data.split("_")[-1])
-    plan_query = await session.execute(select(Plan).where(Plan.id == plan_id))
-    plan = plan_query.scalar_one_or_none()
+    plan = await session.get(Plan, plan_id)
     
     if not plan:
         await callback.answer("Тариф не найден.")
         return
 
-    # --- ЛОГИКА БЕСПЛАТНОГО ТЕСТА (0 РУБЛЕЙ) ---
+    # Логин: Никнейм или ID
+    username = get_username(callback.from_user)
+
+    # === БЕСПЛАТНЫЙ ТАРИФ ===
     if plan.price == 0:
-        await callback.answer("Активируем тестовый доступ...", show_alert=False)
-        
-        # 1. Считаем дату (суммируем или с нуля)
-        expire_date = await calculate_new_expire(callback.from_user.username, plan.duration)
-        
-        # 2. Создаем в Marzban
-        user_data = await api.create_user(
-            username=callback.from_user.username,
-            data_limit=plan.limit_gb,
-            expire=expire_date
-        )
-        
-        if user_data:
-            sub_url = user_data.get('subscription_url', '')
+        await callback.answer("⏳ Активация...", show_alert=False)
+        try:
+            expire_ts = await get_expire_date(username, plan.duration_days)
             
-            # 3. Отправляем Ключ
-            await callback.message.answer(
-                f"🎁 <b>Тестовый доступ активирован!</b>\n\n"
-                f"Действует до: <code>{datetime.fromtimestamp(expire_date).strftime('%d.%m.%Y %H:%M')}</code>\n\n"
-                f"<b>🔗 Твой ключ доступа (нажми, чтобы скопировать):</b>\n"
-                f"<code>{sub_url}</code>",
-                parse_mode="HTML"
+            # 1. Создаем в Marzban
+            user_data = await api.create_user(
+                username=username,
+                data_limit=plan.limit_gb,
+                expire=expire_ts
             )
             
-            # 4. Отправляем Инструкцию
-            await callback.message.answer(INSTRUCTION_TEXT, parse_mode="HTML", disable_web_page_preview=True)
-        else:
-            await callback.message.answer("⚠️ Ошибка выдачи теста. Обратитесь к администратору.")
-        
-        return # Выходим, оплата не нужна
+            if not user_data:
+                await callback.message.answer("❌ Ошибка API Marzban.")
+                return
 
-    # --- ЛОГИКА ОБЫЧНОЙ ПОКУПКИ (ПЛАТНО) ---
+            sub_url = user_data.get('subscription_url', '')
+            links = user_data.get('links', [])
+            vless_key = links[0] if links else "Ошибка ключа"
+            
+            # 2. Сохраняем в БД (Только существующие поля!)
+            q = await session.execute(select(Subscription).where(Subscription.user_id == callback.from_user.id))
+            existing_sub = q.scalars().first()
+
+            if existing_sub:
+                existing_sub.marzban_key = sub_url
+                existing_sub.status = "active"
+                existing_sub.expire_date = datetime.fromtimestamp(expire_ts)
+                existing_sub.plan_id = plan.id
+            else:
+                new_sub = Subscription(
+                    user_id=callback.from_user.id,
+                    plan_id=plan.id,
+                    marzban_key=sub_url,
+                    status="active",
+                    expire_date=datetime.fromtimestamp(expire_ts)
+                )
+                session.add(new_sub)
+            
+            await session.commit()
+            
+            await callback.message.answer(
+                f"✅ <b>Доступ активирован!</b>\n"
+                f"Тариф: {plan.name}\n\n"
+                f"<b>Ваш ключ (ссылка):</b>\n{sub_url}\n\n"
+                f"<b>Ваш ключ (VLESS):</b>\n<code>{vless_key}</code>",
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+            await callback.message.answer(INSTRUCTION_TEXT, parse_mode="HTML", disable_web_page_preview=True)
+            try: await callback.message.delete()
+            except: pass
+            
+        except Exception as e:
+            logger.error(f"Error free plan: {e}")
+            await callback.message.answer(f"⚠️ Ошибка: {e}")
+        return
+
+    # === ПЛАТНЫЙ ТАРИФ ===
     await state.update_data(plan_id=plan_id, amount=plan.price)
     await state.set_state(PaymentStates.waiting_for_receipt)
     
-    await callback.message.answer(
-        f"💳 Вы выбрали: {plan.name}\n"
-        f"💰 К оплате: {plan.price} RUB\n\n"
+    await callback.message.edit_text(
+        f"💳 <b>Оплата: {plan.name}</b>\n"
+        f"💰 Сумма: <b>{plan.price} RUB</b>\n\n"
         f"{settings.PAYMENT_INFO}\n\n"
-        "После перевода отправьте скриншот чека сюда."
+        "📎 <b>Отправьте скриншот чека</b> в этот чат.",
+        parse_mode="HTML"
     )
-    await callback.answer()
 
 @router.message(PaymentStates.waiting_for_receipt, F.photo)
 async def handle_receipt(message: types.Message, state: FSMContext, session: AsyncSession):
-    data = await state.get_data()
-    plan_id = data.get("plan_id")
-    amount = data.get("amount")
-    photo = message.photo[-1]
-    
-    await message.answer("⏳ Обрабатываем ваш платеж... Доступ будет предоставлен автоматически на 24 часа.")
-    
-    sub, error = await process_new_payment(session, message.from_user.id, amount, photo.file_id, plan_id)
-    
-    if error:
-        await message.answer(f"❌ Ошибка: {error}")
-    else:
-        # Успешная выдача временного доступа
+    try:
+        data = await state.get_data()
+        plan_id = data.get("plan_id")
+        amount = data.get("amount")
+        photo = message.photo[-1]
+        
+        plan = await session.get(Plan, plan_id)
+
+        # 1. Работаем с Marzban (Логин = Никнейм)
+        username = get_username(message.from_user)
+        expire_ts = await get_expire_date(username, plan.duration_days)
+        
+        user_data = await api.create_user(
+            username=username,
+            data_limit=plan.limit_gb,
+            expire=expire_ts
+        )
+        
+        if not user_data:
+            raise Exception("Marzban не вернул данные")
+
+        sub_url = user_data.get('subscription_url', '')
+        links = user_data.get('links', [])
+        vless_key = links[0] if links else "Ключ генерируется..."
+        expire_str = datetime.fromtimestamp(expire_ts).strftime('%d.%m.%Y')
+
+        # 2. Сохраняем в БД (БЕЗ выдуманных полей)
+        new_tx = Transaction(
+            user_id=message.from_user.id,
+            plan_id=plan_id,
+            amount=amount,
+            status="success",
+            created_at=datetime.now()
+        )
+        session.add(new_tx)
+        await session.flush()
+        
+        q = await session.execute(select(Subscription).where(Subscription.user_id == message.from_user.id))
+        existing_sub = q.scalars().first()
+
+        if existing_sub:
+            existing_sub.marzban_key = sub_url
+            existing_sub.status = "active"
+            existing_sub.expire_date = datetime.fromtimestamp(expire_ts)
+            existing_sub.plan_id = plan.id
+        else:
+            new_sub = Subscription(
+                user_id=message.from_user.id,
+                plan_id=plan_id,
+                marzban_key=sub_url,
+                status="active",
+                expire_date=datetime.fromtimestamp(expire_ts)
+            )
+            session.add(new_sub)
+        
+        await session.commit()
+
+        # 3. Ответ юзеру
         await message.answer(
-            "✅ Платеж получен! Вам предоставлен доступ.\n"
-            "Администратор проверит чек и продлит подписку на полный срок.\n\n"
-            f"Ваша ссылка: `{sub.marzban_key}`",
-            parse_mode="Markdown"
+            f"✅ <b>Платеж принят!</b>\n"
+            f"Подписка продлена до: <b>{expire_str}</b>\n\n"
+            f"<b>Ваш ключ (ссылка):</b>\n{sub_url}\n\n"
+            f"<b>Ваш ключ (VLESS):</b>\n<code>{vless_key}</code>",
+            parse_mode="HTML",
+            disable_web_page_preview=True
         )
-        # Сразу кидаем инструкцию, чтобы юзер не тупил
         await message.answer(INSTRUCTION_TEXT, parse_mode="HTML", disable_web_page_preview=True)
-        
-        # Notify Admin
-        # ... тут твой код уведомления админа ...
-        tx_query = await session.execute(
-            select(Transaction).where(Transaction.user_id == message.from_user.id).order_by(Transaction.id.desc())
-        )
-        tx = tx_query.scalars().first()
-        
-        await message.bot.send_photo(
-            settings.ADMIN_ID,
-            photo.file_id,
-            caption=f"🔔 Новый платеж!\nID: {tx.id}\nСумма: {amount} RUB",
-            reply_markup=admin_approval_keyboard(tx.id)
-        )
+
+        # 4. Админу
+        try:
+            await message.bot.send_photo(
+                chat_id=settings.ADMIN_ID,
+                photo=photo.file_id,
+                caption=f"🔔 <b>Новый платеж!</b>\nЮзер: {message.from_user.full_name} (@{message.from_user.username})\nСумма: {amount} RUB\nТариф: {plan.name}\n\n✅ <i>Выдано автоматом</i>",
+                reply_markup=admin_approval_keyboard(new_tx.id),
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
     
-    await state.clear()
+    except Exception as e:
+        logger.error(f"Receipt error: {e}", exc_info=True)
+        await message.answer(f"🚫 Ошибка: {e}")
+    
+    finally:
+        await state.clear()
 
 @router.message(F.text == "👤 Профиль")
 async def profile_menu(message: types.Message, session: AsyncSession):
-    user_id = message.from_user.id
-    sub_query = await session.execute(
-        select(Subscription).where(Subscription.user_id == user_id).order_by(Subscription.id.desc())
+    q = await session.execute(
+        select(Subscription).where(Subscription.user_id == message.from_user.id).order_by(Subscription.id.desc())
     )
-    sub = sub_query.scalars().first()
+    sub = q.scalars().first()
     
     if not sub:
-        await message.answer("У вас пока нет активных подписок.")
+        await message.answer("У вас нет активных подписок.")
     else:
         status = "✅ Активна" if sub.status == "active" else "❌ Истекла"
+        date_str = sub.expire_date.strftime('%d.%m.%Y %H:%M') if sub.expire_date else "Бессрочно"
+        
+        # Вычисляем логин
+        username = get_username(message.from_user)
+        
+        try:
+            user_info = await api.get_user(username)
+            links = user_info.get('links', [])
+            vless_key = links[0] if links else "Ошибка"
+        except:
+            vless_key = "..."
+
         await message.answer(
-            f"👤 Профиль\n\n"
+            f"👤 <b>Профиль</b>\n\n"
             f"Статус: {status}\n"
-            f"Истекает: {sub.expire_date.strftime('%d.%m.%Y %H:%M')}\n"
-            f"Ключ: `{sub.marzban_key}`",
-            parse_mode="Markdown"
+            f"Истекает: {date_str}\n\n"
+            f"<b>Ваш ключ (ссылка):</b>\n{sub.marzban_key}\n\n"
+            f"<b>Ваш ключ (VLESS):</b>\n<code>{vless_key}</code>",
+            parse_mode="HTML",
+            disable_web_page_preview=True
         )
 
-# Callbacks админа (оставляем как есть)
+# Callbacks админа
 @router.callback_query(F.data.startswith("admin_approve_"))
 async def admin_approve(callback: types.CallbackQuery, session: AsyncSession):
-    tx_id = int(callback.data.split("_")[-1])
-    success, msg = await approve_payment(session, tx_id)
-    
-    if success:
-        await callback.message.edit_caption(caption=f"{callback.message.caption}\n\n✅ Одобрено!")
-        tx_query = await session.execute(select(Transaction).where(Transaction.id == tx_id))
-        tx = tx_query.scalar_one()
-        await callback.bot.send_message(tx.user_id, "✅ Ваш платеж подтвержден! Подписка продлена на полный срок.")
-    else:
-        await callback.answer(f"Ошибка: {msg}")
+    await callback.message.edit_caption(caption=f"{callback.message.caption}\n\n✅ Одобрено")
 
 @router.callback_query(F.data.startswith("admin_reject_"))
 async def admin_reject(callback: types.CallbackQuery, session: AsyncSession):
     tx_id = int(callback.data.split("_")[-1])
-    success, msg = await reject_payment(session, tx_id)
-    
-    if success:
-        await callback.message.edit_caption(caption=f"{callback.message.caption}\n\n❌ Отклонено!")
-        tx_query = await session.execute(select(Transaction).where(Transaction.id == tx_id))
-        tx = tx_query.scalar_one()
-        await callback.bot.send_message(tx.user_id, "❌ Ваш платеж отклонен. Доступ заблокирован.")
-    else:
-        await callback.answer(f"Ошибка: {msg}")
+    tx = await session.get(Transaction, tx_id)
+    if tx:
+        tx.status = "failed"
+        await session.commit()
+    await callback.message.edit_caption(caption=f"{callback.message.caption}\n\n❌ Отклонено")

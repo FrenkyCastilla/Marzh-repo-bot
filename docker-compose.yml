@@ -10,4 +10,4 @@ services:
     volumes:
       - ./data:/app/data
     ports:
-      - "8000:8000"
+      - "8080:8000"

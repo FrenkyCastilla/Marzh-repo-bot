@@ -1,41 +1,74 @@
-# Telegram VPN Shop Bot (Marzban Integration)
+# 🛡️ VPN Shop Bot (Aiogram 3 + Marzban)
 
-A production-ready Telegram bot for selling VPN access using the Marzban backend.
+![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
+![Aiogram](https://img.shields.io/badge/Aiogram-3.x-blue?logo=telegram)
+![Marzban](https://img.shields.io/badge/Marzban-Integration-black)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-## Features
-- **Automated User Creation**: Optimistic UI grants 24h access immediately upon receipt submission.
-- **Admin Approval**: Manual verification of payments via Telegram with one-click approval/rejection.
-- **Web Admin Panel**: Manage users, plans, and servers via a web interface (SQLAdmin).
-- **Subscription Management**: Background tasks automatically disable expired accounts.
-- **Marzban Integration**: Seamlessly connects to Marzban API for user management.
+Телеграм-бот для автоматической продажи и управления VPN-доступами. Полная интеграция с панелью **Marzban**.
+Бот реализует концепцию **"Доверенного магазина"**: мгновенная выдача товара после отправки чека, с последующей модерацией администратором.
 
-## Tech Stack
-- **Python 3.11+**
-- **Aiogram 3.x** (Telegram Bot)
-- **FastAPI** (Web Server & Admin UI)
-- **SQLAlchemy + SQLite** (Database)
-- **SQLAdmin** (Admin Interface)
-- **Docker** (Deployment)
+## ✨ Ключевые возможности
 
-## Setup
-1. Clone the repository.
-2. Copy `.env.example` to `.env` and fill in your credentials:
-   - `BOT_TOKEN`: Your Telegram Bot token.
-   - `ADMIN_ID`: Your Telegram ID (get it from @userinfobot).
-   - `MARZBAN_HOST`: URL of your Marzban panel.
-   - `MARZBAN_USERNAME/PASSWORD`: Admin credentials for Marzban.
-3. Run with Docker:
-   ```bash
-   docker-compose up -d
-   ```
+### ⚡ Мгновенная выдача (Trusted Flow)
+* **Бесплатный тест:** Пользователь получает доступ в один клик. Бот сам создает пользователя в Marzban.
+* **Покупка:** После отправки скриншота оплаты бот **мгновенно** продлевает подписку и выдает ключи. Администратор проверяет чек постфактум.
 
-## Admin Panel
-Access the web admin panel at `http://your-server-ip:8000/admin`.
-From there, you can add **Plans** (tariffs) which will be displayed in the bot.
+### 🔐 Умная авторизация
+* Никаких проблем с базой данных.
+* Логином в Marzban служит **Telegram Username** пользователя.
+* Если Username отсутствует, используется **Telegram ID** (`user_123456`).
+* 100% защита от дублей.
 
-## Project Structure
-- `app/core`: Configuration and Database models.
-- `app/services`: Marzban API and Payment logic.
-- `app/bot`: Telegram bot handlers and keyboards.
-- `app/web`: Admin panel configuration.
-- `main.py`: Application entry point.
+### 👤 Личный кабинет
+* Просмотр статуса подписки и даты окончания.
+* Получение ключа в формате:
+    * 🔗 **Subscription Link** (для автообновления).
+    * 🔑 **VLESS** (сырой ключ для быстрой вставки).
+
+### 🛠 Админ-панель
+* Уведомления о новых платежах приходят в личку админу.
+* Инлайн-кнопки прямо под фото чека:
+    * ✅ **Одобрить:** Фиксирует успех в базе.
+    * ❌ **Отклонить:** Помечает транзакцию как failed (доступ можно отозвать вручную в панели).
+
+## 🚀 Установка и запуск
+
+Проект полностью упакован в Docker Compose.
+
+### 1. Клонирование
+```bash
+git clone [https://github.com/YOUR_USERNAME/REPO_NAME.git](https://github.com/YOUR_USERNAME/REPO_NAME.git)
+cd vpn-shop-bot
+2. Настройка
+Создайте файл .env на основе примера:
+
+Bash
+
+cp example.env .env
+nano .env
+Заполните переменные:
+
+BOT_TOKEN: Токен от @BotFather.
+
+ADMIN_ID: Ваш Telegram ID.
+
+MARZBAN_URL: Адрес панели (например, https://vpn.example.com:8000).
+
+MARZBAN_USERNAME / PASSWORD: Данные админа панели (sudo).
+
+3. Запуск
+Bash
+
+docker-compose up -d --build
+🗄 Структура проекта
+app/bot: Логика бота (хендлеры, клавиатуры).
+
+app/core: База данных и модели (SQLAlchemy).
+
+app/services: API Marzban и сервис платежей.
+
+data/: Папка для БД (SQLite).
+
+🤝 Контакты
+Разработано для частного использования.
