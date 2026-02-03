@@ -12,11 +12,13 @@ class ServerAdmin(ModelView, model=Server):
     column_list = [Server.id, Server.host_url, Server.username]
 
 class SubscriptionAdmin(ModelView, model=Subscription):
-    column_list = [Subscription.id, Subscription.user_id, Subscription.expire_date, Subscription.status]
+    # Убедись, что plan_id здесь есть
+    column_list = [Subscription.id, Subscription.user_id, Subscription.plan_id, Subscription.expire_date, Subscription.status]
 
 class TransactionAdmin(ModelView, model=Transaction):
     column_list = [Transaction.id, Transaction.user_id, Transaction.amount, Transaction.status, Transaction.created_at]
 
+# --- ВОТ ЭТА ФУНКЦИЯ ПРОПАЛА ---
 def setup_admin(app, engine):
     admin = Admin(app, engine)
     admin.add_view(UserAdmin)

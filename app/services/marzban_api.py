@@ -7,7 +7,6 @@ logger = logging.getLogger(__name__)
 
 class MarzbanAPI:
     def __init__(self):
-        # Гарантируем, что в конце хоста нет слеша, чтобы не было двойных //
         self.host = settings.MARZBAN_HOST.rstrip('/')
         self.username = settings.MARZBAN_USERNAME
         self.password = settings.MARZBAN_PASSWORD
@@ -39,64 +38,70 @@ class MarzbanAPI:
         return {"Authorization": f"Bearer {self.token}"}
 
     def _fix_subscription_url(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Магия: Если ссылка относительная (/sub/...), превращаем её в абсолютную (https://...)
-        """
         if not data:
             return data
-            
         sub_url = data.get("subscription_url", "")
         if sub_url and sub_url.startswith("/"):
-            # Склеиваем хост и путь
             data["subscription_url"] = f"{self.host}{sub_url}"
-            logger.info(f"Fixed subscription URL: {data['subscription_url']}")
-            
         return data
 
     async def create_user(self, username: str, data_limit: int, expire: int) -> Optional[Dict[str, Any]]:
-        """
-        Create OR Update (Renew) a user in Marzban.
-        """
         url = f"{self.host}/api/user"
         headers = await self._get_headers()
+        
+        # LYRA: Формируем настройки VLESS гибко
+        vless_settings = {
+            "inbound_tags": [settings.INBOUND_TAG],
+        }
+        # Добавляем flow только если он задан и не равен "none" или пустой строке
+        if settings.VLESS_FLOW and settings.VLESS_FLOW.lower() not in ["", "none"]:
+            vless_settings["flow"] = settings.VLESS_FLOW
+
+        proxies_config = {
+            "vless": vless_settings
+        }
+
         payload = {
             "username": username,
-            "proxies": {"vless": {"inbound_tags": ["VLESS TCP REALITY"]}}, 
-            "data_limit": data_limit * 1024 * 1024 * 1024, # GB to Bytes
+            "proxies": proxies_config, 
+            "data_limit": data_limit * 1024 * 1024 * 1024,
             "expire": expire,
             "status": "active"
         }
         
         try:
             async with aiohttp.ClientSession() as session:
-                # 1. Попытка создания
                 async with session.post(url, json=payload, headers=headers, ssl=False) as response:
                     if response.status == 200:
                         data = await response.json()
-                        return self._fix_subscription_url(data) # <--- ЧИНИМ ССЫЛКУ ТУТ
+                        return self._fix_subscription_url(data)
                     
-                    # 2. Если юзер уже есть - ОБНОВЛЯЕМ
                     elif response.status == 409:
                         logger.info(f"User {username} exists. Updating...")
                         modify_url = f"{self.host}/api/user/{username}"
                         async with session.put(modify_url, json=payload, headers=headers, ssl=False) as mod_response:
                             if mod_response.status == 200:
                                 data = await mod_response.json()
-                                return self._fix_subscription_url(data) # <--- И ТУТ
+                                return self._fix_subscription_url(data)
                             else:
-                                logger.error(f"Failed to renew user. Status: {mod_response.status}")
+                                error_text = await mod_response.text()
+                                logger.error(f"Failed to renew user {username}. Status: {mod_response.status} | {error_text}")
                                 return None
 
-                    elif response.status == 401: # Token expired
+                    elif response.status == 401:
                         self.token = None
                         return await self.create_user(username, data_limit, expire)
                     else:
-                        logger.error(f"Marzban create_user error: {response.status}")
+                        # LYRA: Теперь мы читаем текст ошибки!
+                        error_text = await response.text()
+                        logger.error(f"Marzban create_user error: {response.status} | {error_text}")
                         return None
         except Exception as e:
             logger.error(f"Marzban connection error: {e}")
             return None
 
+    # Остальные методы (get_user, modify_user, delete_user) можно оставить как были, 
+    # или тоже добавить логирование, но пока хватит create_user.
     async def get_user(self, username: str) -> Optional[Dict[str, Any]]:
         url = f"{self.host}/api/user/{username}"
         headers = await self._get_headers()

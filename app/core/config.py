@@ -14,9 +14,15 @@ class Settings(BaseSettings):
     MARZBAN_USERNAME: str = os.getenv("MARZBAN_USERNAME", "")
     MARZBAN_PASSWORD: str = os.getenv("MARZBAN_PASSWORD", "")
     
+    # --- LYRA: Added missing fields ---
+    INBOUND_TAG: str = os.getenv("INBOUND_TAG", "VLESS TCP REALITY")
+    VLESS_FLOW: str = os.getenv("VLESS_FLOW", "xtls-rprx-vision")
+    # ----------------------------------
+    
     PAYMENT_INFO: str = os.getenv("PAYMENT_INFO", "Transfer RUB to Ozon Bank: +79990000000")
 
     class Config:
         env_file = ".env"
+        extra = "ignore"  # Игнорировать лишние переменные, чтобы не крашиться
 
 settings = Settings()

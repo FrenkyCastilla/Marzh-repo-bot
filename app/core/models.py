@@ -1,15 +1,13 @@
 from sqlalchemy import Column, Integer, String, Boolean, BigInteger, DateTime, ForeignKey
-from sqlalchemy.orm import declarative_base
 from datetime import datetime
-
-Base = declarative_base()
+# LYRA: Импортируем Base из db.py, чтобы main.py видел эти модели при создании таблиц
+from .db import Base 
 
 class Server(Base):
     __tablename__ = "servers"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
-    # БЫЛО: api_url, СТАЛО: host_url (как хочет админка)
     host_url = Column(String, nullable=False) 
     username = Column(String, nullable=True)
     password = Column(String, nullable=True)
@@ -23,7 +21,6 @@ class User(Base):
     full_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    # Поля для админки
     balance = Column(Integer, default=0)
     is_banned = Column(Boolean, default=False)
 
@@ -53,6 +50,7 @@ class Subscription(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, nullable=False)
+    plan_id = Column(Integer, nullable=True) 
     marzban_key = Column(String, nullable=True)
     status = Column(String, default="active") 
     expire_date = Column(DateTime, nullable=True)
