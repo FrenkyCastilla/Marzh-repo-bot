@@ -1,73 +1,48 @@
-# 🛡️ VPN Shop Bot (Aiogram 3 + Marzban)
 
-![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
-![Aiogram](https://img.shields.io/badge/Aiogram-3.x-blue?logo=telegram)
-![Marzban](https://img.shields.io/badge/Marzban-Integration-black)
-![License](https://img.shields.io/badge/License-MIT-green)
+🤖 VPN Shop Bot (Marzban Integration)
+Telegram bot for automated VPN subscription sales based on Marzban panel. Handles user creation, VLESS (Reality) key issuance, payment verification, and plan management.
 
-A Telegram bot for automated VPN access sales and management. Fully integrated with the **Marzban** panel.
-The bot implements a **"Trusted Shop"** concept: instant delivery immediately after receipt submission, with post-moderation by the administrator.
+✨ Features
+Auto-Provisioning: Creates Marzban users via API instantly.
 
-## ✨ Key Features
+Smart Config: Auto-detects Inbound Tag and protocol settings.
 
-### ⚡ Instant Delivery (Trusted Flow)
-* **Free Trial:** One-click access. The bot automatically creates a user in Marzban.
-* **Purchase:** Upon sending a payment screenshot, the bot **instantly** extends the subscription and delivers the keys. The admin verifies the receipt later.
+Plans: Flexible pricing (Trial, Monthly, Yearly).
 
-### 🔐 Smart Authorization
-* Seamless integration with Telegram.
-* Uses **Telegram Username** as the Marzban login.
-* Falls back to **Telegram ID** (`user_123456`) if no username is set.
-* Prevents duplicate accounts.
+Payments: User sends receipt -> Admin approves -> Access granted.
 
-### 👤 User Dashboard
-* View subscription status and expiration date.
-* Retrieve access keys in two formats:
-    * 🔗 **Subscription Link** (for auto-updates).
-    * 🔑 **VLESS** (raw key for quick connection).
+Admin Panel: Manage users, stats, and broadcasts via Telegram.
 
-### 🛠 Admin Interface
-* Payment notifications sent directly to the admin's DM.
-* Inline buttons right under the receipt photo:
-    * ✅ **Approve:** Logs success in the database.
-    * ❌ **Reject:** Marks transaction as failed (access can be revoked manually via panel).
-
-## 🚀 Installation
-
-The project is Docker-ready.
-
-### 1. Clone
-```bash
-git clone [https://github.com/YOUR_USERNAME/REPO_NAME.git](https://github.com/YOUR_USERNAME/REPO_NAME.git)
-cd vpn-shop-bot
-2. Configuration
-Create .env file from example:
-
+🛠 Setup
+1. Clone
 Bash
 
-cp example.env .env
-nano .env
-Fill in the details:
+git clone [https://github.com/FrenkyCastilla/Marzh-repo-bot.git](https://github.com/FrenkyCastilla/Marzh-repo-bot.git)
+cd Marzh-repo-bot
+2. Configuration (.env)
+Create .env file:
 
-BOT_TOKEN: From @BotFather.
+Ini, TOML
 
-ADMIN_ID: Your Telegram numeric ID.
+BOT_TOKEN=your_token
+ADMIN_ID=your_id
+DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
 
-MARZBAN_URL: Panel URL (e.g., https://vpn.example.com:8000).
+MARZBAN_HOST=https://your-domain/dashboard
+MARZBAN_USERNAME=admin
+MARZBAN_PASSWORD=password
 
-MARZBAN_USERNAME / PASSWORD: Panel admin credentials.
+# Fallback tag (bot auto-detects usually)
+INBOUND_TAG=VLESS TCP REALITY
+# Leave empty for auto-config
+VLESS_FLOW=
 
-3. Deploy
+PAYMENT_INFO=Transfer details here
+3. Run
 Bash
 
-docker-compose up -d --build
-🗄 Project Structure
-app/bot: Bot logic (handlers, keyboards).
+docker compose up -d --build
+4. Initialize Plans
+Bash
 
-app/core: Database & Models (SQLAlchemy).
-
-app/services: Marzban API & Payment service.
-
-data/: SQLite storage.
-
-Developed for private VPN administration.
+docker compose cp seed.py bot:/app/seed.py && docker compose exec bot python seed.py
